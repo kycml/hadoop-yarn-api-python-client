@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
 import xml.etree.ElementTree as ET
+import requests
+from requests_kerberos import HTTPKerberosAuth
 try:
     from httplib import HTTPConnection, OK
 except ImportError:
@@ -29,22 +31,18 @@ def _get_resource_manager(hadoop_conf_path, rm_id = None):
         return None
 
 
-def _check_is_active_rm(rm_web_host, rm_web_port):
-    conn = HTTPConnection(rm_web_host, rm_web_port)
-    try:
-        conn.request('GET', '/cluster')
-    except:
-        return False
-    response = conn.getresponse()
-    if response.status != OK:
+def _check_is_active_rm(rm_web_host, rm_web_port, kerberos_enabled=False):
+    r = requests.get('http://{}:{}/cluster'.format(rm_web_host, rm_web_port),
+                     auth=HTTPKerberosAuth() if kerberos_enabled else None)
+    if r.status_code != 200:
         return False
     else:
-        if response.getheader('Refresh', None) is not None:
+        if r.headers.get('Refresh', None) is not None:
             return False
         return True
 
 
-def get_resource_manager_host_port():
+def get_resource_manager_host_port(kerberos_enabled=False):
     hadoop_conf_path = CONF_DIR
     rm_ids = _get_rm_ids(hadoop_conf_path)
     if rm_ids is not None:
@@ -52,7 +50,7 @@ def get_resource_manager_host_port():
             ret = _get_resource_manager(hadoop_conf_path, rm_id)
             if ret is not None:
                 (host, port) = ret
-                if _check_is_active_rm(host, port):
+                if _check_is_active_rm(host, port, kerberos_enabled):
                     return host, port
         return None
     else:
